@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Private Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { display: flex; height: 100vh; background-color: #0e1621; justify-content: center; align-items: center; }
+
+        /* Auth Modal */
+        .auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .auth-card { background: #17212b; padding: 30px; border-radius: 12px; width: 90%; max-width: 360px; color: #fff; text-align: center; }
+        .auth-card h2 { margin-bottom: 20px; color: #5288c1; }
+        .auth-card input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #242f3d; background: #242f3d; color: #fff; border-radius: 8px; outline: none; }
+        .avatar-upload { margin-bottom: 15px; text-align: left; }
+        .avatar-upload label { display: block; font-size: 12px; color: #7f91a4; margin-bottom: 5px; }
+        .auth-btn { width: 100%; padding: 12px; background: #5288c1; border: none; color: white; font-weight: bold; border-radius: 8px; cursor: pointer; }
+
+        /* Main Container */
+        .app-container { display: none; width: 100%; max-width: 1200px; height: 100vh; background: #17212b; overflow: hidden; }
+        
+        /* Sidebar (Kontaktlar ro'yxati) */
+        .sidebar { width: 320px; border-right: 1px solid #10171e; display: flex; flex-direction: column; background: #17212b; }
+        .user-profile { padding: 15px; background: #242f3d; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #10171e; }
+        .profile-img { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; background: #5288c1; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
+        .profile-info { overflow: hidden; }
+        .profile-nick { color: #fff; font-weight: bold; font-size: 15px; }
+
+        .chat-list-title { padding: 10px 15px; font-size: 12px; color: #7f91a4; font-weight: bold; background: #17212b; }
+        .chat-list { flex: 1; overflow-y: auto; }
+        .user-item { display: flex; align-items: center; gap: 12px; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #10171e; transition: background 0.2s; }
+        .user-item:hover, .user-item.active { background: #202b36; }
+        .user-item-name { color: #fff; font-size: 14px; font-weight: 500; }
+
+        /* Chat Area */
+        .chat-area { flex: 1; display: flex; flex-direction: column; background-color: #0e1621; }
+        .chat-header { padding: 15px 20px; background: #17212b; border-bottom: 1px solid #10171e; color: #fff; display: flex; align-items: center; gap: 12px; }
+        
+        .messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .msg { max-width: 65%; padding: 8px 12px; border-radius: 12px; font-size: 14px; word-break: break-word; color: #fff; }
+        .msg.my { background: #2b5278; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .msg.other { background: #182533; align-self: flex-start; border-bottom-left-radius: 2px; }
+
+        .input-bar { padding: 12px 15px; background: #17212b; display: flex; gap: 10px; }
+        .input-bar input { flex: 1; padding: 12px; border: none; background: #242f3d; border-radius: 8px; color: #fff; outline: none; }
+        .send-btn { background: #5288c1; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        
+        .empty-chat { flex: 1; display: flex; align-items: center; justify-content: center; color: #7f91a4; font-size: 15px; }
+    </style>
+</head>
+<body>
+
+<!-- Kirish oynasi -->
+<div class="auth-overlay" id="authModal">
+    <div class="auth-card">
+        <h2>Telegramga Kirish</h2>
+        <input type="text" id="regNick" placeholder="Laqabingiz (Nick)">
+        <input type="password" id="regPass" placeholder="Parol">
+        <div class="avatar-upload">
+            <label>Profil rasmingiz (ixtiyoriy):</label>
+            <input type="file" id="regAvatar" accept="image/*">
+        </div>
+        <button class="auth-btn" onclick="login()">Kirish</button>
+    </div>
+</div>
+
+<!-- Asosiy oynalar -->
+<div class="app-container" id="appContainer">
+    <div class="sidebar">
+        <div class="user-profile">
+            <img id="myAvatarImg" class="profile-img" src="" alt="" style="display:none;">
+            <div id="myAvatarText" class="profile-img"></div>
+            <div class="profile-info">
+                <div class="profile-nick" id="myNickDisplay"></div>
+            </div>
+        </div>
+        <div class="chat-list-title">FOYDALANUVCHILAR (LICHKALAR)</div>
+        <div class="chat-list" id="usersList"></div>
+    </div>
+
+    <div class="chat-area" id="chatArea">
+        <div class="empty-chat" id="emptyChatText">Muloqotni boshlash uchun chap tomondan kontakt tanlang</div>
+        
+        <div id="activeChatWindow" style="display:none; flex-direction:column; height:100%;">
+            <div class="chat-header">
+                <div class="profile-img" id="targetAvatarText"></div>
+                <img id="targetAvatarImg" class="profile-img" src="" style="display:none;">
+                <h3 id="targetNickDisplay">...</h3>
+            </div>
+            <div class="messages-container" id="messagesContainer"></div>
+            <div class="input-bar">
+                <input type="text" id="messageInput" placeholder="Xabar yozing...">
+                <button class="send-btn" onclick="sendMessage()">Yuborish</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<script>
+    const firebaseConfig = {
+        databaseURL: "https://telegram-clone-demo-default-rtdb.firebaseio.com"
+    };
+
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentUser = { nick: "", pass: "", avatar: "" };
+    let selectedUser = null; // Hozir kim bilan lichkada gaplashilayotgani
+    let currentChatRef = null;
+
+    function login() {
+        const nick = document.getElementById('regNick').value.trim();
+        const pass = document.getElementById('regPass').value.trim();
+        const avatarFile = document.getElementById('regAvatar').files[0];
+
+        if (!nick || !pass) {
+            alert("Nick va Parolni kiriting!");
+            return;
+        }
+
+        currentUser.nick = nick;
+        currentUser.pass = pass;
+
+        if (avatarFile) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentUser.avatar = e.target.result;
+                initUser();
+            };
+            reader.readAsDataURL(avatarFile);
+        } else {
+            initUser();
+        }
+    }
+
+    function initUser() {
+        document.getElementById('authModal').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'flex';
+        document.getElementById('myNickDisplay').innerText = currentUser.nick;
+
+        if (currentUser.avatar) {
+            document.getElementById('myAvatarImg').src = currentUser.avatar;
+            document.getElementById('myAvatarImg').style.display = 'block';
+            document.getElementById('myAvatarText').style.display = 'none';
+        } else {
+            document.getElementById('myAvatarText').innerText = currentUser.nick.charAt(0).toUpperCase();
+        }
+
+        // O'zimizni foydalanuvchilar ro'yxatiga bazaga qo'shamiz
+        db.ref("users/" + currentUser.nick).set({
+            nick: currentUser.nick,
+            avatar: currentUser.avatar || ""
+        });
+
+        // Boshqa foydalanuvchilarni ro'yxatda ko'rsatamiz
+        listenUsers();
+    }
+
+    // Tizimdagi barcha foydalanuvchilarni olish
+    function listenUsers() {
+        db.ref("users").on("child_added", (snapshot) => {
+            const user = snapshot.val();
+            if (user.nick !== currentUser.nick) {
+                const usersList = document.getElementById('usersList');
+                const userDiv = document.createElement('div');
+                userDiv.className = 'user-item';
+                userDiv.id = `user-${user.nick}`;
+                
+                let avatarHtml = user.avatar 
+                    ? `<img src="${user.avatar}" class="profile-img">`
+                    : `<div class="profile-img">${user.nick.charAt(0).toUpperCase()}</div>`;
+
+                userDiv.innerHTML = `${avatarHtml}<div class="user-item-name">${user.nick}</div>`;
+                userDiv.onclick = () => selectUser(user);
+                
+                usersList.appendChild(userDiv);
+            }
+        });
+    }
+
+    // Lichkani ochish
+    function selectUser(user) {
+        selectedUser = user;
+        
+        document.getElementById('emptyChatText').style.display = 'none';
+        document.getElementById('activeChatWindow').style.display = 'flex';
+        document.getElementById('targetNickDisplay').innerText = user.nick;
+
+        if (user.avatar) {
+            document.getElementById('targetAvatarImg').src = user.avatar;
+            document.getElementById('targetAvatarImg').style.display = 'block';
+            document.getElementById('targetAvatarText').style.display = 'none';
+        } else {
+            document.getElementById('targetAvatarText').innerText = user.nick.charAt(0).toUpperCase();
+            document.getElementById('targetAvatarText').style.display = 'flex';
+            document.getElementById('targetAvatarImg').style.display = 'none';
+        }
+
+        // Ikkala foydalanuvchi uchun unikal Chat ID yaratish
+        const chatId = [currentUser.nick, user.nick].sort().join("_");
+        
+        if (currentChatRef) currentChatRef.off(); // Eski tinglovchini o'chirish
+        
+        document.getElementById('messagesContainer').innerHTML = '';
+        currentChatRef = db.ref("private_chats/" + chatId);
+        
+        // Xabarlarni yuklash
+        currentChatRef.on("child_added", (snapshot) => {
+            const data = snapshot.val();
+            const container = document.getElementById('messagesContainer');
+            const isMyMsg = data.sender === currentUser.nick;
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg ${isMyMsg ? 'my' : 'other'}`;
+            msgDiv.innerText = data.message;
+
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        });
+    }
+
+    // Xabar yuborish
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const text = input.value.trim();
+
+        if (text !== "" && selectedUser) {
+            const chatId = [currentUser.nick, selectedUser.nick].sort().join("_");
+            db.ref("private_chats/" + chatId).push({
+                sender: currentUser.nick,
+                message: text,
+                timestamp: Date.now()
+            });
+            input.value = "";
+        }
+    }
+
+    document.getElementById('messageInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') sendMessage();
+    });
+</script>
+</body>
+</html>
